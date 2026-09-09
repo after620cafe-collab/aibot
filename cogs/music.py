@@ -20,6 +20,12 @@ YTDL_OPTIONS = {
     "source_address": "0.0.0.0",
     "extract_flat": False,
     "ignoreerrors": False,
+    "remote_components": "ejs:github",
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["default"],
+        }
+    },
 }
 
 FFMPEG_OPTIONS = {
@@ -150,7 +156,7 @@ class Music(commands.Cog):
                 requester="",
                 thumbnail=data.get("thumbnail") or "",
             )
-        return await asyncio.to_thread(run)
+        return await asyncio.wait_for(asyncio.to_thread(run), timeout=35)
 
     async def ensure_voice(self, ctx) -> Optional[discord.VoiceClient]:
         if not ctx.author.voice or not ctx.author.voice.channel:
@@ -250,7 +256,9 @@ class Music(commands.Cog):
                         pass
             except Exception as e:
                 if state.text_channel:
-                    await state.text_channel.send(f"⚠️ Playback error: `{type(e).__name__}`. Trying next track...")
+                    await state.text_channel.send(
+                        f"⚠️ **Playback error:** `{str(e)[:500]}`\\nTrying the next track..."
+                    )
                 asyncio.create_task(self.play_next(guild_id))
 
     async def send_queue(self, destination, state: GuildMusic):
@@ -291,8 +299,11 @@ class Music(commands.Cog):
                 state.queue.insert(0, track)
                 await msg.edit(content=f"🎵 **Loading:** `{track.title}`")
                 await self.play_next(ctx.guild.id)
+        except asyncio.TimeoutError:
+            await msg.edit(content="❌ YouTube took too long to respond. Please try the song again in a few seconds.")
         except Exception as e:
-            await msg.edit(content=f"❌ Song not found / unavailable: `{type(e).__name__}`")
+            error_text = str(e).replace("\\n", " ")[:700]
+            await msg.edit(content=f"❌ **Music error:** `{error_text or type(e).__name__}`")
 
     @commands.command(name="pause")
     async def pause_cmd(self, ctx):
@@ -410,6 +421,79 @@ class Music(commands.Cog):
             await ctx.guild.voice_client.disconnect(force=True)
         state.voice = None
         await ctx.reply("👋 **Rani left the voice channel.**", mention_author=False)
+
+
+    async def _slash_ctx(self, interaction: discord.Interaction):
+        class Ctx:
+            guild = interaction.guild
+            author = interaction.user
+            channel = interaction.channel
+            voice_client = interaction.guild.voice_client if interaction.guild else None
+            async def reply(self, *args, **kwargs):
+                return await interaction.followup.send(*args, **kwargs)
+        return Ctx()
+
+    @discord.app_commands.command(name="play", description="Play a song in your voice channel")
+    @discord.app_commands.describe(song="Song name or YouTube URL")
+    async def slash_play(self, interaction: discord.Interaction, song: str):
+        await interaction.response.defer()
+        if not interaction.guild:
+            return await interaction.followup.send("❌ Use this in a server.")
+        if not interaction.user.voice or not interaction.user.voice.channel:
+            return await interaction.followup.send("🎙️ Join a voice channel first.")
+        channel = interaction.user.voice.channel
+        state = self.state(interaction.guild.id)
+        state.text_channel = interaction.channel
+        try:
+            vc = interaction.guild.voice_client
+            if not vc:
+                vc = await channel.connect(self_deaf=True)
+            elif vc.channel.id != channel.id and not vc.is_playing():
+                await vc.move_to(channel)
+            state.voice = vc
+            track = await self.extract(song)
+            track.requester = interaction.user.display_name
+            if vc.is_playing() or vc.is_paused():
+                state.queue.append(track)
+                await interaction.followup.send(f"➕ Added to queue: **{track.title}**")
+            else:
+                state.queue.insert(0, track)
+                await interaction.followup.send(f"🎵 Loading **{track.title}**…")
+                await self.play_next(interaction.guild.id)
+        except Exception as e:
+            await interaction.followup.send(f"❌ Music error: `{str(e)[:700]}`")
+
+    @discord.app_commands.command(name="pause", description="Pause Rani music")
+    async def slash_pause(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        vc = interaction.guild.voice_client if interaction.guild else None
+        if vc and vc.is_playing():
+            vc.pause()
+            return await interaction.followup.send("⏸️ Paused.")
+        await interaction.followup.send("❌ Nothing is playing.")
+
+    @discord.app_commands.command(name="resume", description="Resume Rani music")
+    async def slash_resume(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        vc = interaction.guild.voice_client if interaction.guild else None
+        if vc and vc.is_paused():
+            vc.resume()
+            return await interaction.followup.send("▶️ Resumed.")
+        await interaction.followup.send("❌ Nothing is paused.")
+
+    @discord.app_commands.command(name="skip", description="Skip the current song")
+    async def slash_skip(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        vc = interaction.guild.voice_client if interaction.guild else None
+        if vc and (vc.is_playing() or vc.is_paused()):
+            vc.stop()
+            return await interaction.followup.send("⏭️ Skipping.")
+        await interaction.followup.send("❌ Nothing is playing.")
+
+    @discord.app_commands.command(name="queue", description="Show the music queue")
+    async def slash_queue(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        await self.send_queue(interaction.followup, self.state(interaction.guild.id))
 
     @commands.command(name="musichelp", aliases=["mhelp"])
     async def music_help(self, ctx):

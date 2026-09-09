@@ -49,7 +49,16 @@ async def on_ready():
     print("=" * 50)
     try:
         synced = await bot.tree.sync()
-        print(f"Slash commands synced: {len(synced)}")
+        print(f"Global slash commands synced: {len(synced)}")
+        # Also sync into every connected guild so slash commands appear immediately,
+        # instead of waiting for global Discord propagation.
+        for guild in bot.guilds:
+            try:
+                bot.tree.copy_global_to(guild=guild)
+                guild_synced = await bot.tree.sync(guild=guild)
+                print(f"Guild slash sync: {guild.name} -> {len(guild_synced)}")
+            except Exception:
+                logging.exception("Guild slash sync failed for %s", guild.name)
     except Exception:
         logging.exception("Slash sync failed")
 
