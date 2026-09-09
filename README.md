@@ -1,53 +1,19 @@
-# Rani AI V3
+# Rani Discord Bot — Railway Ready
 
-Professional Discord all-rounder bot made by Tyson.
+This build has **AI/Groq removed**. Prefix and slash commands use the same hybrid command implementation.
 
 ## Railway Variables
-Required:
-- DISCORD_TOKEN
-- GROQ_API_KEY
+- `DISCORD_TOKEN` = your Discord bot token
+- `PREFIX` = `-`
+- `SYNC_GUILD_ID` = your server ID for instant slash-command sync (recommended)
+- `TTS_VOICE` = `hi-IN-SwaraNeural` (optional)
 
-Optional:
-- GROQ_MODEL=openai/gpt-oss-20b
-- PREFIX=-
-- AI_AUTO_CHANNEL_ID=
-- TTS_VOICE=hi-IN-SwaraNeural
+## Discord Developer Portal
+Enable **Message Content Intent** and **Server Members Intent**. When inviting the bot, include both `bot` and `applications.commands` scopes.
 
-## Main commands
-- -help
-- -ai <message>
-- /ai <message>
-- -translate <language> <text>
-- -joinvc / -leavevc
-- -t <text> (Hindi TTS in VC)
-- -nitro (safe prank)
-- -ban / -unban / -kick / -mute / -unmute
-- -unbanall confirm
-- -unmuteall confirm
-- -clear / -lock / -unlock / -hide / -unhide / -slowmode / -clone / -snipe
-- -warn / -warnings / -clearwarns
-- -voicekick / -voicemute / -voiceunmute / -vcmove / -vcpull
-- -vcdeafen / -vcundeafen / -voiceban / -voiceunban
-- -autoresponder
-- -tagreaction
-- -createrole / -giverole / -removerole / -rolecolor
-- -8ball / -coinflip / -dice / -rps / -joke / -truth / -dare
-
-Image generation was intentionally removed.
 ## Music
-Rani includes a YouTube music player using yt-dlp + FFmpeg.
+The bot uses yt-dlp + Deno EJS support + FFmpeg. Join a voice channel and use either:
+- `-play song name`
+- `/play song name`
 
-Commands:
-- `-play <song name or YouTube URL>`
-- `-pause`, `-resume`, `-skip`, `-stop`
-- `-queue`, `-nowplaying`, `-shuffle`, `-remove <number>`
-- `-loop off|track|queue`
-- `-volume 1-200`
-- `-247 on|off`
-- `-joinmusic`, `-leavemusic`, `-musichelp`
-
-`-247 on` keeps Rani connected and repeats the last track when the queue becomes empty. It also uses reconnect flags for stream interruptions. No Discord bot can guarantee 100% uptime if the host, Discord, or source service goes down.
-
-
-**Bot:** Rani AI  
-**Created by:** Tyson
+The same applies to music controls and the other bot commands.

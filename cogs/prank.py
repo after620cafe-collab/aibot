@@ -23,7 +23,7 @@ class NitroView(discord.ui.View):
 class Prank(commands.Cog):
     def __init__(self, bot): self.bot=bot
 
-    @commands.command(name="nitro")
+    @commands.hybrid_command(name="nitro")
     async def nitro(self, ctx):
         e=discord.Embed(title="💎 Discord Nitro Gift", description="🎁 Someone sent you a Nitro gift!\n\nClick the button to start the claim animation.", color=discord.Color.red())
         e.add_field(name="Status", value="🟢 Gift detected", inline=False)

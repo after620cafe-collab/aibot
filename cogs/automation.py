@@ -26,7 +26,7 @@ class Automation(commands.Cog):
                 json.dump({"autoreplies":self.autoreplies,"tag_reaction":self.tag_reaction},f,indent=2)
         except Exception: pass
 
-    @commands.command(name="autoresponder", aliases=["ar"])
+    @commands.hybrid_command(name="autoresponder", aliases=["ar"])
     @commands.has_permissions(manage_guild=True)
     async def autoresponder(self, ctx, action: str, trigger: str, *, response: str=""):
         gid=str(ctx.guild.id)
@@ -44,14 +44,14 @@ class Automation(commands.Cog):
             return await ctx.reply("📋 " + (", ".join(f"`{k}`" for k in vals) or "No auto-replies."))
         await ctx.reply("Use `add`, `remove`, or `list`.")
 
-    @commands.command(name="tagreaction", aliases=["tagreact"])
+    @commands.hybrid_command(name="tagreaction", aliases=["tagreact"])
     @commands.has_permissions(manage_guild=True)
     async def tagreaction(self, ctx, emoji: str):
         self.tag_reaction[str(ctx.guild.id)]=emoji
         self.save()
         await ctx.reply(f"💗 I'll react with {emoji} when someone tags me.")
 
-    @commands.command(name="automation")
+    @commands.hybrid_command(name="automation")
     @commands.has_permissions(manage_guild=True)
     async def automation(self, ctx, state: str):
         state=state.lower()

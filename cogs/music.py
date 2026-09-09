@@ -1,19 +1,19 @@
 import asyncio
+import logging
 import random
 from dataclasses import dataclass, field
 from typing import Optional
 
 import discord
-from discord import app_commands
-from discord.ext import commands
 import yt_dlp
+from discord.ext import commands
 
 from config import PREFIX
 
 RED = discord.Color.from_rgb(220, 35, 55)
 
 YTDL_OPTIONS = {
-    "format": "bestaudio[ext=webm]/bestaudio/best",
+    "format": "bestaudio/best",
     "noplaylist": True,
     "quiet": True,
     "no_warnings": True,
@@ -21,15 +21,17 @@ YTDL_OPTIONS = {
     "source_address": "0.0.0.0",
     "extract_flat": False,
     "ignoreerrors": False,
-    "remote_components": "ejs:github",
+    "js_runtimes": {"deno": {}},
+    "remote_components": ["ejs:github"],
 }
 
-FFMPEG_OPTIONS = {
-    "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 10 -reconnect_at_eof 1 -nostdin",
-    "options": "-vn -ac 2 -ar 48000 -b:a 192k -bufsize 512k",
-}
-
+FFMPEG_BEFORE = (
+    "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 "
+    "-reconnect_at_eof 1 -nostdin"
+)
+FFMPEG_OPTIONS = "-vn -ac 2 -ar 48000 -loglevel warning"
 YTDL = yt_dlp.YoutubeDL(YTDL_OPTIONS)
+
 
 @dataclass
 class Track:
@@ -39,6 +41,7 @@ class Track:
     duration: int = 0
     requester: str = ""
     thumbnail: str = ""
+
 
 @dataclass
 class GuildMusic:
@@ -59,6 +62,7 @@ def fmt_time(seconds: int) -> str:
     m, s = divmod(rem, 60)
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
+
 class MusicButtons(discord.ui.View):
     def __init__(self, cog, guild_id: int):
         super().__init__(timeout=600)
@@ -66,7 +70,7 @@ class MusicButtons(discord.ui.View):
         self.guild_id = guild_id
 
     async def do(self, interaction: discord.Interaction, action: str):
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         state = self.cog.state(self.guild_id)
         vc = state.voice or interaction.guild.voice_client
         if not vc:
@@ -97,11 +101,12 @@ class MusicButtons(discord.ui.View):
     @discord.ui.button(label="Stop", emoji="⏹️", style=discord.ButtonStyle.danger)
     async def stop(self, interaction, button): await self.do(interaction, "stop")
 
+
 class Music(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.states: dict[int, GuildMusic] = {}
-        self.tasks: set[asyncio.Future] = set()
+        self.tasks = set()
 
     def state(self, guild_id: int) -> GuildMusic:
         return self.states.setdefault(guild_id, GuildMusic())
@@ -111,38 +116,42 @@ class Music(commands.Cog):
             target = query if query.startswith(("http://", "https://")) else f"ytsearch1:{query}"
             data = YTDL.extract_info(target, download=False)
             if not data:
-                raise RuntimeError("No YouTube result found.")
+                raise RuntimeError("YouTube returned no result.")
             if "entries" in data:
                 data = next((x for x in data["entries"] if x), None)
-            if not data or not data.get("url"):
-                raise RuntimeError("YouTube returned no playable audio stream.")
+            if not data:
+                raise RuntimeError("No playable YouTube result found.")
+            url = data.get("url")
+            if not url:
+                raise RuntimeError("YouTube did not provide an audio stream.")
             return Track(
                 title=data.get("title") or "Unknown track",
-                stream_url=data["url"],
+                stream_url=url,
                 webpage=data.get("webpage_url") or data.get("original_url") or query,
                 duration=int(data.get("duration") or 0),
                 thumbnail=data.get("thumbnail") or "",
             )
-        return await asyncio.wait_for(asyncio.to_thread(run), timeout=45)
+        return await asyncio.wait_for(asyncio.to_thread(run), timeout=60)
 
-    async def ensure_voice(self, ctx) -> Optional[discord.VoiceClient]:
+    async def ensure_voice(self, ctx):
         if not ctx.author.voice or not ctx.author.voice.channel:
             await ctx.reply("🎙️ Pehle voice channel join karo.", mention_author=False)
             return None
         channel = ctx.author.voice.channel
         state = self.state(ctx.guild.id)
         vc = ctx.guild.voice_client
-        if vc:
-            state.voice = vc
-            if vc.channel.id != channel.id and not vc.is_playing():
-                await vc.move_to(channel)
-            return vc
         try:
+            if vc:
+                state.voice = vc
+                if vc.channel.id != channel.id and not vc.is_playing():
+                    await vc.move_to(channel)
+                return vc
             vc = await channel.connect(self_deaf=True)
             state.voice = vc
             return vc
         except Exception as e:
-            await ctx.reply(f"❌ Voice join failed: `{e}`", mention_author=False)
+            logging.exception("Voice connection failed")
+            await ctx.reply(f"❌ Voice join failed: `{str(e)[:500]}`", mention_author=False)
             return None
 
     def player_embed(self, track: Track, state: GuildMusic):
@@ -172,7 +181,6 @@ class Music(commands.Cog):
             else:
                 state.current = None; return
 
-            # Refresh the stream URL immediately before playback; YouTube URLs expire.
             try:
                 fresh = await self.extract(track.webpage)
                 track.stream_url = fresh.stream_url
@@ -180,36 +188,43 @@ class Music(commands.Cog):
                 track.duration = fresh.duration or track.duration
                 track.thumbnail = fresh.thumbnail or track.thumbnail
             except Exception as e:
+                logging.exception("Stream refresh failed")
                 if state.text_channel:
-                    await state.text_channel.send(f"⚠️ Couldn't refresh **{track.title}**: `{str(e)[:500]}`")
+                    await state.text_channel.send(f"⚠️ Couldn't load **{track.title}**: `{str(e)[:700]}`")
                 if state.queue:
                     return await self.play_next(guild_id)
                 return
 
             state.current = track
+
             def after(error):
-                if error: logging_msg = f"[Rani Music] {guild_id}: {error}"; print(logging_msg)
+                if error:
+                    logging.error("Rani music playback error in %s: %s", guild_id, error)
                 fut = asyncio.run_coroutine_threadsafe(self.play_next(guild_id), self.bot.loop)
-                self.tasks.add(fut); fut.add_done_callback(self.tasks.discard)
+                self.tasks.add(fut)
+                fut.add_done_callback(self.tasks.discard)
 
             try:
-                source = discord.FFmpegOpusAudio(track.stream_url, before_options=FFMPEG_OPTIONS["before_options"], options=FFMPEG_OPTIONS["options"])
+                source = discord.FFmpegPCMAudio(
+                    track.stream_url,
+                    before_options=FFMPEG_BEFORE,
+                    options=FFMPEG_OPTIONS,
+                )
                 source = discord.PCMVolumeTransformer(source, volume=state.volume)
                 vc.play(source, after=after)
                 if state.text_channel:
                     await state.text_channel.send(embed=self.player_embed(track, state), view=MusicButtons(self, guild_id))
             except Exception as e:
+                logging.exception("Playback start failed")
                 if state.text_channel:
-                    await state.text_channel.send(f"⚠️ **Playback failed:** `{str(e)[:600]}`")
+                    await state.text_channel.send(f"⚠️ **Playback failed:** `{str(e)[:700]}`")
                 if state.queue:
                     return await self.play_next(guild_id)
 
     async def send_queue(self, destination, state):
         e = discord.Embed(title="🔴 RANI MUSIC • QUEUE", color=RED)
         e.add_field(name="🎵 Now", value=f"**{state.current.title}**" if state.current else "Nothing playing", inline=False)
-        if state.queue:
-            e.add_field(name="📜 Up Next", value="\n".join(f"`{i}.` {t.title}" for i,t in enumerate(state.queue[:15],1)), inline=False)
-        else: e.add_field(name="📜 Up Next", value="Queue empty.", inline=False)
+        e.add_field(name="📜 Up Next", value="\n".join(f"`{i}.` {t.title}" for i,t in enumerate(state.queue[:15],1)) if state.queue else "Queue empty.", inline=False)
         e.set_footer(text=f"Loop: {state.loop.upper()} • 24/7: {'ON' if state.stay_24_7 else 'OFF'} • Made by Tyson")
         return await destination.send(embed=e)
 
@@ -219,101 +234,68 @@ class Music(commands.Cog):
         state = self.state(ctx.guild.id); state.text_channel = ctx.channel
         msg = await ctx.reply("🔎 **Rani is searching YouTube...**", mention_author=False)
         try:
-            track = await self.extract(query); track.requester = ctx.author.display_name
+            track = await self.extract(query)
+            track.requester = ctx.author.display_name
             if vc.is_playing() or vc.is_paused():
-                state.queue.append(track); return await msg.edit(content=f"➕ **Added:** `{track.title}`")
+                state.queue.append(track)
+                return await msg.edit(content=f"➕ **Added:** `{track.title}`")
             state.queue.insert(0, track)
             await msg.edit(content=f"🎵 **Loading:** `{track.title}`")
             await self.play_next(ctx.guild.id)
         except asyncio.TimeoutError:
-            await msg.edit(content="❌ YouTube timed out. Try again.")
+            await msg.edit(content="❌ YouTube timed out. Try another song.")
         except Exception as e:
+            logging.exception("Music command failed")
             await msg.edit(content=f"❌ **Music error:** `{str(e)[:900]}`")
 
-    @commands.command(name="play", aliases=["p"])
+    @commands.hybrid_command(name="play", aliases=["p"], description="Play a song from YouTube")
     async def play(self, ctx, *, query: str): await self.do_play(ctx, query)
 
-    @app_commands.command(name="play", description="Play a song from YouTube")
-    @app_commands.describe(query="Song name or YouTube URL")
-    async def slash_play(self, interaction: discord.Interaction, query: str):
-        await interaction.response.defer()
-        class Ctx:
-            guild=interaction.guild; author=interaction.user; channel=interaction.channel
-            async def reply(self, content=None, **kwargs): return await interaction.followup.send(content, **kwargs)
-        await self.do_play(Ctx(), query)
-
-    @commands.command(name="pause")
+    @commands.hybrid_command(name="pause", description="Pause music")
     async def pause(self, ctx):
         vc=ctx.guild.voice_client
         if vc and vc.is_playing(): vc.pause(); await ctx.reply("⏸️ **Paused.**", mention_author=False)
         else: await ctx.reply("❌ Nothing is playing.", mention_author=False)
 
-    @app_commands.command(name="pause", description="Pause music")
-    async def slash_pause(self, interaction):
-        vc=interaction.guild.voice_client if interaction.guild else None
-        if vc and vc.is_playing(): vc.pause(); await interaction.response.send_message("⏸️ **Paused.**")
-        else: await interaction.response.send_message("❌ Nothing is playing.")
-
-    @commands.command(name="resume", aliases=["unpause"])
+    @commands.hybrid_command(name="resume", description="Resume music")
     async def resume(self, ctx):
         vc=ctx.guild.voice_client
         if vc and vc.is_paused(): vc.resume(); await ctx.reply("▶️ **Resumed.**", mention_author=False)
         else: await ctx.reply("❌ Nothing is paused.", mention_author=False)
 
-    @app_commands.command(name="resume", description="Resume music")
-    async def slash_resume(self, interaction):
-        vc=interaction.guild.voice_client if interaction.guild else None
-        if vc and vc.is_paused(): vc.resume(); await interaction.response.send_message("▶️ **Resumed.**")
-        else: await interaction.response.send_message("❌ Nothing is paused.")
-
-    @commands.command(name="skip", aliases=["s"])
+    @commands.hybrid_command(name="skip", aliases=["s"], description="Skip current song")
     async def skip(self, ctx):
         vc=ctx.guild.voice_client
         if vc and (vc.is_playing() or vc.is_paused()): vc.stop(); await ctx.reply("⏭️ **Skipped.**", mention_author=False)
         else: await ctx.reply("❌ Nothing is playing.", mention_author=False)
 
-    @app_commands.command(name="skip", description="Skip current song")
-    async def slash_skip(self, interaction):
-        vc=interaction.guild.voice_client if interaction.guild else None
-        if vc and (vc.is_playing() or vc.is_paused()): vc.stop(); await interaction.response.send_message("⏭️ **Skipped.**")
-        else: await interaction.response.send_message("❌ Nothing is playing.")
-
-    @commands.command(name="queue", aliases=["q"])
+    @commands.hybrid_command(name="queue", aliases=["q"], description="Show music queue")
     async def queue(self, ctx): await self.send_queue(ctx, self.state(ctx.guild.id))
 
-    @app_commands.command(name="queue", description="Show music queue")
-    async def slash_queue(self, interaction): await self.send_queue(interaction.response, self.state(interaction.guild.id)) if False else await interaction.response.send_message(embed=discord.Embed(title="🔴 RANI MUSIC • QUEUE", description="Use `-queue` for the full queue.", color=RED))
-
-    @commands.command(name="nowplaying", aliases=["np"])
+    @commands.hybrid_command(name="nowplaying", aliases=["np"], description="Show current song")
     async def nowplaying(self, ctx):
         state=self.state(ctx.guild.id)
         if not state.current: return await ctx.reply("❌ Nothing is playing.", mention_author=False)
         await ctx.reply(embed=self.player_embed(state.current,state),view=MusicButtons(self,ctx.guild.id),mention_author=False)
 
-    @app_commands.command(name="nowplaying", description="Show current song")
-    async def slash_nowplaying(self, interaction):
-        state=self.state(interaction.guild.id)
-        if not state.current: return await interaction.response.send_message("❌ Nothing is playing.")
-        await interaction.response.send_message(embed=self.player_embed(state.current,state),view=MusicButtons(self,interaction.guild.id))
-
-    @commands.command(name="stop", aliases=["disconnect"])
+    @commands.hybrid_command(name="stop", aliases=["disconnect"], description="Stop music and leave voice")
     async def stop(self, ctx):
         state=self.state(ctx.guild.id); state.queue.clear(); state.current=None; state.loop="off"
         if ctx.guild.voice_client: await ctx.guild.voice_client.disconnect(force=True)
         state.voice=None; await ctx.reply("⏹️ **Music stopped.**",mention_author=False)
 
-    @commands.command(name="joinmusic", aliases=["joinvc","musicjoin"])
+    @commands.hybrid_command(name="joinmusic", aliases=["joinvc","musicjoin"], description="Join your voice channel")
     async def joinmusic(self, ctx):
         vc=await self.ensure_voice(ctx)
         if vc: self.state(ctx.guild.id).text_channel=ctx.channel; await ctx.reply(f"🎧 **Rani joined:** `{vc.channel.name}`",mention_author=False)
 
-    @commands.command(name="leavemusic", aliases=["leavevc","musicleave"])
+    @commands.hybrid_command(name="leavemusic", aliases=["leavevc","musicleave"], description="Leave voice")
     async def leavemusic(self, ctx):
         state=self.state(ctx.guild.id); state.stay_24_7=False; state.queue.clear(); state.current=None
         if ctx.guild.voice_client: await ctx.guild.voice_client.disconnect(force=True)
         state.voice=None; await ctx.reply("👋 **Rani left voice.**",mention_author=False)
 
-    @commands.command(name="volume", aliases=["vol"])
+    @commands.hybrid_command(name="volume", aliases=["vol"], description="Set music volume 1-200")
     @commands.has_permissions(manage_guild=True)
     async def volume(self, ctx, level: int):
         if not 1<=level<=200: return await ctx.reply("🔊 Use 1-200.",mention_author=False)
@@ -322,40 +304,40 @@ class Music(commands.Cog):
         if vc and isinstance(getattr(vc,"source",None),discord.PCMVolumeTransformer): vc.source.volume=state.volume
         await ctx.reply(f"🔊 Volume **{level}%**",mention_author=False)
 
-    @commands.command(name="loop")
+    @commands.hybrid_command(name="loop", description="Set loop mode")
     async def loop(self, ctx, mode: str="track"):
         mode=mode.lower()
-        if mode not in ("off","track","queue"): return await ctx.reply("🔁 `-loop off/track/queue`",mention_author=False)
+        if mode not in ("off","track","queue"): return await ctx.reply("🔁 Use `-loop off/track/queue`",mention_author=False)
         self.state(ctx.guild.id).loop=mode; await ctx.reply(f"🔁 Loop **{mode.upper()}**",mention_author=False)
 
-    @commands.command(name="247", aliases=["24/7","stay"])
+    @commands.hybrid_command(name="247", aliases=["stay"], description="Keep music playing 24/7")
     async def always_on(self, ctx, mode: str="on"):
         mode=mode.lower()
-        if mode not in ("on","off"): return await ctx.reply("♾️ `-247 on/off`",mention_author=False)
+        if mode not in ("on","off"): return await ctx.reply("♾️ Use `-247 on/off`",mention_author=False)
         state=self.state(ctx.guild.id); state.stay_24_7=mode=="on"
         if state.stay_24_7: state.loop="track"
         await ctx.reply(f"♾️ **24/7 {'ON' if state.stay_24_7 else 'OFF'}**",mention_author=False)
 
-    @commands.command(name="shuffle")
+    @commands.hybrid_command(name="shuffle", description="Shuffle the music queue")
     async def shuffle(self, ctx):
         state=self.state(ctx.guild.id)
         if len(state.queue)<2: return await ctx.reply("🔀 Need 2+ queued songs.",mention_author=False)
         random.shuffle(state.queue); await ctx.reply("🔀 **Queue shuffled.**",mention_author=False)
 
-    @commands.command(name="remove")
+    @commands.hybrid_command(name="remove", description="Remove a song from the queue")
     async def remove(self, ctx, position: int):
         state=self.state(ctx.guild.id)
         if not 1<=position<=len(state.queue): return await ctx.reply("❌ Invalid position.",mention_author=False)
         t=state.queue.pop(position-1); await ctx.reply(f"🗑️ Removed **{t.title}**",mention_author=False)
 
-    @commands.command(name="musichelp", aliases=["mhelp"])
+    @commands.hybrid_command(name="musichelp", aliases=["mhelp"], description="Music command help")
     async def musichelp(self, ctx):
         e=discord.Embed(title="🔴 RANI MUSIC • CONTROL CENTER",description="**Premium red music UI • Made by Tyson**",color=RED)
-        e.add_field(name="🎵 Play",value=f"`{PREFIX}play <song>` / `/play`",inline=False)
+        e.add_field(name="🎵 Play",value=f"`{PREFIX}play <song>` or `/play`",inline=False)
         e.add_field(name="⏯️ Controls",value=f"`{PREFIX}pause` `resume` `skip` `stop` `nowplaying`",inline=False)
         e.add_field(name="📜 Queue",value=f"`{PREFIX}queue` `shuffle` `remove <number>`",inline=False)
         e.add_field(name="♾️ Pro",value=f"`{PREFIX}loop off/track/queue` `volume 1-200` `247 on/off`",inline=False)
-        e.set_footer(text="Rani AI • Created by Tyson")
+        e.set_footer(text="Rani Music • Made by Tyson")
         await ctx.reply(embed=e,view=MusicButtons(self,ctx.guild.id),mention_author=False)
 
 async def setup(bot):

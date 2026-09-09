@@ -74,40 +74,40 @@ class HelpView(discord.ui.View):
 class Utility(commands.Cog):
     def __init__(self, bot): self.bot=bot
 
-    @commands.command(name="help", aliases=["commands","menu"])
+    @commands.hybrid_command(name="help", aliases=["commands","menu"])
     async def help(self, ctx):
-        e=discord.Embed(title="🔴 Rani AI • Help Center",description="**Professional Discord command center**\nSelect a category below.",color=RED)
+        e=discord.Embed(title="🔴 Rani • Help Center",description="**Professional Discord command center**\nSelect a category below.",color=RED)
         e.add_field(name="⚡ Prefix",value=f"`{PREFIX}`",inline=True)
         e.add_field(name="👨‍💻 Developer",value="**Made by Tyson**",inline=True)
-        e.add_field(name="✨ Modules",value="🧠 AI  •  🎵 Music  •  🛡️ Mod  •  🎙️ Voice  •  ⚙️ Automation  •  🎭 Roles  •  🎁 Fun",inline=False)
-        e.set_footer(text="Rani AI • Made by Tyson")
+        e.add_field(name="✨ Modules",value="🎵 Music  •  🛡️ Mod  •  🎙️ Voice  •  ⚙️ Automation  •  🎭 Roles  •  🎁 Fun",inline=False)
+        e.set_footer(text="Rani • Made by Tyson")
         await ctx.reply(embed=e,view=HelpView(self.bot),mention_author=False)
 
-    @commands.command(name="ping")
+    @commands.hybrid_command(name="ping")
     async def ping(self,ctx): await ctx.reply(f"🏓 **Pong** `{round(self.bot.latency*1000)}ms`",mention_author=False)
 
-    @commands.command(name="avatar",aliases=["av"])
+    @commands.hybrid_command(name="avatar",aliases=["av"])
     async def avatar(self,ctx,member:discord.Member|None=None):
         member=member or ctx.author
         e=discord.Embed(title=f"🖼️ {member.display_name}",color=RED); e.set_image(url=member.display_avatar.url); await ctx.reply(embed=e,mention_author=False)
 
-    @commands.command(name="serverinfo",aliases=["server"])
+    @commands.hybrid_command(name="serverinfo",aliases=["server"])
     async def serverinfo(self,ctx):
         g=ctx.guild; e=discord.Embed(title=f"📊 {g.name}",color=RED)
         e.add_field(name="Members",value=str(g.member_count)); e.add_field(name="Channels",value=str(len(g.channels))); e.add_field(name="Roles",value=str(len(g.roles)))
         await ctx.reply(embed=e,mention_author=False)
 
-    @commands.command(name="userinfo",aliases=["user"])
+    @commands.hybrid_command(name="userinfo",aliases=["user"])
     async def userinfo(self,ctx,member:discord.Member|None=None):
         m=member or ctx.author; e=discord.Embed(title=f"👤 {m.display_name}",color=RED)
         e.set_thumbnail(url=m.display_avatar.url); e.add_field(name="User",value=str(m),inline=False); e.add_field(name="ID",value=str(m.id))
         await ctx.reply(embed=e,mention_author=False)
 
-    @commands.command(name="poll")
+    @commands.hybrid_command(name="poll")
     async def poll(self,ctx,*,question:str):
         e=discord.Embed(title="📊 Poll",description=question,color=RED); msg=await ctx.send(embed=e); await msg.add_reaction("👍"); await msg.add_reaction("👎")
 
-    @commands.command(name="say")
+    @commands.hybrid_command(name="say")
     @commands.has_permissions(manage_messages=True)
     async def say(self,ctx,*,text:str):
         await ctx.message.delete(); await ctx.send(text)

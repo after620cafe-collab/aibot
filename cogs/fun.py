@@ -5,21 +5,21 @@ from discord.ext import commands
 class Fun(commands.Cog):
     def __init__(self, bot): self.bot = bot
 
-    @commands.command(name="8ball")
+    @commands.hybrid_command(name="8ball")
     async def eightball(self, ctx, *, question: str):
         answers = ["Yes.", "No.", "Maybe.", "Definitely.", "Ask again later.", "Absolutely not.", "Looks good."]
         await ctx.reply(f"🎱 **{random.choice(answers)}**", mention_author=False)
 
-    @commands.command(name="coinflip")
+    @commands.hybrid_command(name="coinflip")
     async def coinflip(self, ctx):
         await ctx.reply(f"🪙 **{random.choice(['Heads', 'Tails'])}**", mention_author=False)
 
-    @commands.command(name="dice")
+    @commands.hybrid_command(name="dice")
     async def dice(self, ctx, sides: int = 6):
         sides = max(2, min(sides, 100))
         await ctx.reply(f"🎲 You rolled **{random.randint(1, sides)} / {sides}**", mention_author=False)
 
-    @commands.command(name="rps")
+    @commands.hybrid_command(name="rps")
     async def rps(self, ctx, choice: str):
         choice = choice.lower()
         if choice not in {"rock","paper","scissors"}:
@@ -29,7 +29,7 @@ class Fun(commands.Cog):
         result = "You win! 🔥" if win else ("Draw! 🤝" if choice == bot else "I win! 😈")
         await ctx.reply(f"🎮 You: **{choice}** | Me: **{bot}**\n{result}", mention_author=False)
 
-    @commands.command(name="joke")
+    @commands.hybrid_command(name="joke")
     async def joke(self, ctx):
         jokes = [
             "Why did the bot go to school? To improve its byte-sized knowledge. 🤖",
@@ -38,21 +38,21 @@ class Fun(commands.Cog):
         ]
         await ctx.reply(random.choice(jokes), mention_author=False)
 
-    @commands.command(name="truth")
+    @commands.hybrid_command(name="truth")
     async def truth(self, ctx):
         await ctx.reply("😳 Truth: What is your most embarrassing autocorrect?", mention_author=False)
 
-    @commands.command(name="dare")
+    @commands.hybrid_command(name="dare")
     async def dare(self, ctx):
         await ctx.reply("🔥 Dare: Send the last emoji you used 10 times.", mention_author=False)
 
-    @commands.command(name="choose")
+    @commands.hybrid_command(name="choose")
     async def choose(self, ctx, *, options: str):
         vals = [x.strip() for x in options.split("|") if x.strip()]
         if len(vals) < 2: return await ctx.reply("Use: `-choose pizza | burger | pasta`")
         await ctx.reply(f"🎯 I choose: **{random.choice(vals)}**", mention_author=False)
 
-    @commands.command(name="rate")
+    @commands.hybrid_command(name="rate")
     async def rate(self, ctx, *, thing: str):
         await ctx.reply(f"📊 **{thing}** gets **{random.randint(1,100)}%**", mention_author=False)
 
