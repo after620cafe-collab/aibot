@@ -1,5 +1,4 @@
 import discord
-from discord import app_commands
 from discord.ext import commands
 from config import PREFIX
 
@@ -84,19 +83,6 @@ class Utility(commands.Cog):
         e.set_footer(text="Rani AI • Made by Tyson")
         await ctx.reply(embed=e,view=HelpView(self.bot),mention_author=False)
 
-
-    @discord.app_commands.command(name="help", description="Open the Rani AI command center")
-    async def slash_help(self, interaction: discord.Interaction):
-        e=discord.Embed(
-            title="🔴 RANI AI • COMMAND CENTER",
-            description="Professional all-in-one Discord bot",
-            color=RED
-        )
-        e.add_field(name="🎵 Music", value=f"`/play` • `/pause` • `/resume` • `/skip` • `/queue`", inline=False)
-        e.add_field(name="🧠 AI", value=f"`/ai`", inline=False)
-        e.add_field(name="👨‍💻 Created by", value="**Tyson**", inline=False)
-        e.set_footer(text="Rani AI • Made by Tyson")
-        await interaction.response.send_message(embed=e, view=HelpView(self.bot))
     @commands.command(name="ping")
     async def ping(self,ctx): await ctx.reply(f"🏓 **Pong** `{round(self.bot.latency*1000)}ms`",mention_author=False)
 
