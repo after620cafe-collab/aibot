@@ -1,81 +1,36 @@
-# Aqua AI — Discord All-Rounder Bot
+# Aqua AI — Discord All-in-One Bot
 
-Prefix: `-`
+A professional Discord bot with AI chat, image generation, moderation, fun commands, utilities and a button-based help menu.
 
-## Features
+**Prefix:** `-`
+**Brand:** Aqua AI
+**Made by:** Tyson
 
-- AI chat with Gemini
-- Conversation memory
-- Mention-based AI replies
-- Translation / rewriting / summarization
-- AI roast and rizz
-- Fun games
-- Moderation commands
-- Image-generation command (only if the configured Gemini model/account supports image output)
-- Discord VC join/leave foundation
-- Railway-ready start command
-- Secrets kept outside GitHub
+## Railway Variables
+- `DISCORD_TOKEN`
+- `GEMINI_API_KEY`
+- `PREFIX=-`
+- `GEMINI_MODEL=gemini-2.5-flash`
+- `GEMINI_IMAGE_MODEL=gemini-2.5-flash-image`
+- `MAX_MEMORY_MESSAGES=12`
+- `AI_AUTO_CHANNEL_ID=` (optional)
 
-## 1. Discord setup
+Never commit real API keys to GitHub.
 
-Create a bot in the Discord Developer Portal.
+## Main commands
+### AI
+`-ai`, `-ask`, `-chat`, `-gpt`, `-reset`, `-roast`, `-rizz`, `-translate`, `-rewrite`, `-summarize`, `-explain`, `-code`
 
-Enable these **Privileged Gateway Intents**:
-- Message Content Intent
-- Server Members Intent
-- Presence Intent
+### Image
+`-imagine <prompt>`
 
-Invite it with `bot` and `applications.commands` scopes.
+### Fun
+`-joke`, `-8ball`, `-coinflip`, `-dice`, `-rps`, `-ship`, `-rate`, `-choose`, `-compliment`, `-pickup`, `-truth`, `-dare`
 
-## 2. Google Gemini API key
+### Moderation
+`-clear`, `-ban`, `-kick`, `-timeout`, `-warn`, `-warnings`, `-clearwarns`, `-lock`, `-unlock`, `-slowmode`
 
-Create a Gemini API key in Google AI Studio.
+### Tools
+`-help`, `-ping`, `-avatar`, `-serverinfo`, `-userinfo`, `-poll`, `-say`
 
-Put the key only in Railway Variables as `GEMINI_API_KEY`.
-
-## 3. GitHub
-
-Upload all project files.
-
-Do NOT upload `.env`.
-Only `.env.example` should be committed.
-
-## 4. Railway
-
-Create a Railway project and deploy this GitHub repository.
-
-Variables:
-
-DISCORD_TOKEN=your_discord_bot_token
-GEMINI_API_KEY=your_gemini_api_key
-PREFIX=-
-
-Optional:
-
-GEMINI_MODEL=gemini-2.5-flash
-MAX_MEMORY_MESSAGES=12
-AI_AUTO_CHANNEL_ID=
-
-The repository already includes `railway.toml` with:
-
-python main.py
-
-## 5. Test
-
-- `-ping`
-- `-help`
-- `-ai hello`
-- `-translate hindi How are you?`
-- `-rewrite professional send me the file`
-- `-joke`
-- `-rizz coffee is my favorite`
-- `-roast @user`
-- `-coinflip`
-- `-dice`
-- `-joinvc`
-
-## Important
-
-Free API limits can change. Image generation and voice AI are provider/Discord dependency dependent. The bot catches these failures instead of intentionally crashing.
-
-Never share your Discord token or API key.
+The `-help` command opens an interactive button UI with categories and shows **Made by Tyson**.
